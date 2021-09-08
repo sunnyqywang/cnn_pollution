@@ -4,33 +4,37 @@ pre process data
 @author: shenhao/qingyi
 """
 
-import pandas as pd
+
+import math
 import numpy as np
 from os import listdir
+import pandas as pd
 import pickle
 import sys
-from util_data import *
-import math
 
-date = '20200606'
-char_name = '_no_airport_no_gas_no_SVO'
-# 2020060601
+from setup import *
+from util_data import *
+
+date = '210908'
+char_name = '_no_airport_no_gas_coal_combined_oil_combined'
+
+# 20060601, 210908
 variables_export = ['COAL', 'INDCT',
                     'INDOT', 'SVC', 'OIL',
                     'DEM', 'rain', 'TEM']
 
-# 2020060602
+# not used, 20060602
 variables_export = ['RDC', 'AGC', 'AGO', 'INDCT',
                     'INDOT', 'SVC', 'SVOtrans',
                     'DEM', 'rain', 'TEM']
 
 # airport ID10
-airport = pd.read_csv('../data/project2_energy_1812/raw/airport.csv')
+airport = pd.read_csv(data_dir+"raw/airport.csv")
 airport = np.array(airport['ID10'])
 
 ###############################################################################
 # map stationID
-station_index = pd.read_excel('../data/project2_energy_1812/raw/stationID.xlsx')
+station_index = pd.read_excel(data_dir+"raw/stationID.xlsx")
 ## note:
 #    STID is used in the energy folder as index.
 #    station_code is used in air pollution file as index.
@@ -50,13 +54,13 @@ weather_variables = ['DEM', 'rain', 'TEM']
 data = {}
 airport_cells = []
 print("Read raw energy data...")
-for folder in listdir('../data/project2_energy_1812/raw/result'):
+for folder in listdir(data_dir+"raw/result"):
     if 'DS' not in folder and '._' not in folder: # address the DS_Store...
         folder_station_code = station_index.loc[station_index['STID'] == folder, 'station_code'].values[0]
         data[folder_station_code] = {}
         airport_cell=False
-        for csv_file in listdir('../data/project2_energy_1812/raw/result/'+ folder):
-            directory_path = '../data/project2_energy_1812/raw/result/'+folder+'/'+csv_file
+        for csv_file in listdir(data_dir+"raw/result/"+ folder):
+            directory_path = data_dir+"raw/result/"+folder+"/"+csv_file
             csv_file_ = csv_file[:-4]
             if csv_file_ == 'ID10':
                 id10 = pd.read_csv(directory_path, header = None)
@@ -84,20 +88,19 @@ for folder in listdir('../data/project2_energy_1812/raw/result'):
 print("Cleared transportation inputs from ", len(set(airport_cells)), " airports.")
 
 print("Read raw weather data...")
-for folder in listdir('../data/project2_energy_1812/raw/weather'):
+for folder in listdir(data_dir+"raw/weather"):
     if 'DS' not in folder and 'Rhistory' not in folder and '._' not in folder: # address the DS_Store and Rhistory...
         folder_station_code = station_index.loc[station_index['STID'] == folder, 'station_code'].values[0]
-        for csv_file in listdir('../data/project2_energy_1812/raw/weather/'+ folder):
-            directory_path = '../data/project2_energy_1812/raw/weather/'+folder+'/'+csv_file
+        for csv_file in listdir(data_dir+"raw/weather/"+ folder):
+            directory_path = data_dir+"raw/weather/"+folder+"/"+csv_file
             csv_file_ = csv_file[:-4]
             if csv_file_ in weather_variables: # add 3 weather variables
                 data[folder_station_code][csv_file_] = pd.read_csv(directory_path, header = None).fillna(0)
 
-with open('../data/project2_energy_1812/process/energy_data_dic'+char_name+'.pickle', 'wb') as data_dic:
+with open(data_dir+"process/energy_data_dic"+char_name+".pickle", 'wb') as data_dic:
     pickle.dump(data, data_dic, protocol=pickle.HIGHEST_PROTOCOL)
 
 ###############################################################################
-
 ### 1. obtain scale info for normalization
 mean_scale_dic = {}
 sd_scale_dic = {}
@@ -143,8 +146,7 @@ for key in data.keys():
         data_standard_const[key][var_].fillna(0, inplace=True)
 
 # turn data, mean_scale_dic, sd_scale_dic to tensors
-data_standard = data_standard_minmax
-n_station = len(data_standard.keys())
+n_station = len(data_standard_minmax.keys())
 image_height = 61
 image_width = 61
 n_channel = len(variables_export)
@@ -174,62 +176,85 @@ for key in data.keys():
 
 ###############################################################################
 ## import air pollution data, clean and translate
-air_p = pd.read_excel('../data/project2_energy_1812/raw/air_quality_annual.xls')
+air_p = pd.read_excel(data_dir+"raw/air_quality_annual.xls")
+# add province info for stratified sampling
+station_prov = pd.read_excel(data_dir+"raw/stationID_province_region.xlsx")
+air_p = pd.merge(air_p, station_prov, on='station_code')
 air_p.index = [str(v) for v in air_p['station_code']]
 print("Number of stations in air_pollution dataset is: ", air_p.shape[0])
-print("Number of stations in energy dataset is: ", len(data_standard.keys())) # only a subset: 943...
+print("Number of stations in energy dataset is: ", n_station) # only a subset: 943...
+# obtain populaiton as weights
+pop_weights = air_p.loc[list(data_standard_minmax.keys()),'station_pop']
+# export
+air_p.to_csv(data_dir+"process/air_pollution_raw.csv")
+
 useful_vars = ['pm25', 'pm10', 'so2', 'no2', 'co', 'o3', 'aqi']
-air_p_subset = air_p.loc[list(data_standard.keys()), useful_vars]
+air_p_subset = air_p.loc[list(data_standard_minmax.keys()), useful_vars]
 print("Fill in one NA value...")
 air_p_subset.fillna(air_p_subset.mean(), inplace = True)
-## normalize this air_p_subset
-air_p_subset_standard = (air_p_subset - air_p_subset.mean())/np.sqrt(air_p_subset.var())
-# obtain populaiton as weights
-pop_weights = air_p.loc[list(data_standard.keys()),'station_pop']
-# obtain northern city indicators
-north_city_index = air_p.loc[list(data_standard.keys()),'city_clean_heating']
-# export datasets
-air_p.to_csv('../data/project2_energy_1812/process/air_pollution_raw.csv')
-#air_p_subset.to_csv('../data/project2_energy_1812/process/air_pollution_processed.csv')
-#air_p_subset_standard.to_csv('../data/project2_energy_1812/process/air_pollution_standard_processed.csv')
+air_p_subset.to_csv(data_dir+"process/air_pollution_processed.csv")
+
+# ## normalize this air_p_subset
+# air_p_subset_standard = (air_p_subset - air_p_subset.mean())/np.sqrt(air_p_subset.var())
+# # obtain northern city indicators
+# north_city_index = air_p.loc[list(data_standard.keys()),'city_clean_heating']
+# #air_p_subset_standard.to_csv('../data/project2_energy_1812/process/air_pollution_standard_processed.csv')
 
 # split energy, energy mean, energy std, and air pollution datasets into three types: training, validation, and testing sets.
 print("Split the datasets into training, validation, and testing...")
+stratify = air_p.loc[list(data_standard_minmax.keys()), 'region'].to_numpy()
 
 # split datasets
+# each contains a dictionary with train/val/test of input/output/index/pop_weight
 # minmax standardized data
-data_minmax_training_validation_testing_y_nonstand = prepare_tensor_data(data_standard_minmax, air_p_subset, pop_weights, variables_export)
+data_minmax_training_validation_testing = prepare_tensor_data(data_standard_minmax, air_p_subset, pop_weights, variables_export, stratify=stratify)
 # standardized data
-data_norm_training_validation_testing_y_nonstand = prepare_tensor_data(data_standard_norm, air_p_subset, pop_weights, variables_export)
+data_norm_training_validation_testing = prepare_tensor_data(data_standard_norm, air_p_subset, pop_weights, variables_export, stratify=stratify)
 # constant standardized data
-data_const_training_validation_testing_y_nonstand = prepare_tensor_data(data_standard_const, air_p_subset, pop_weights, variables_export)
+data_const_training_validation_testing = prepare_tensor_data(data_standard_const, air_p_subset, pop_weights, variables_export, stratify=stratify)
+
 # scale information
-data_mean_training_validation_testing_y_nonstand = prepare_mean_value_data(data_mean_dic, air_p_subset, pop_weights, variables_export)
-data_std_training_validation_testing_y_nonstand = prepare_mean_value_data(data_std_dic, air_p_subset, pop_weights, variables_export)
-data_min_training_validation_testing_y_nonstand = prepare_mean_value_data(min_dic, air_p_subset, pop_weights, variables_export)
-data_max_training_validation_testing_y_nonstand = prepare_mean_value_data(max_dic, air_p_subset, pop_weights, variables_export)
+data_mean_training_validation_testing = prepare_tensor_data(data_mean_dic, air_p_subset, pop_weights, variables_export, stratify=stratify)
+data_std_training_validation_testing = prepare_tensor_data(data_std_dic, air_p_subset, pop_weights, variables_export, stratify=stratify)
+data_min_training_validation_testing = prepare_tensor_data(min_dic, air_p_subset, pop_weights, variables_export, stratify=stratify)
+data_max_training_validation_testing = prepare_tensor_data(max_dic, air_p_subset, pop_weights, variables_export, stratify=stratify)
 
-full_data_process = {}
 # change 20200315: two normalizations are included. in previous versions only energy_air_nonstand exists (standard normalization)
-full_data_process['energy_minmax_air_nonstand'] = data_minmax_training_validation_testing_y_nonstand
-full_data_process['energy_norm_air_nonstand'] = data_norm_training_validation_testing_y_nonstand
-full_data_process['energy_const_air_nonstand'] = data_const_training_validation_testing_y_nonstand
+# update 20210908: took out all _nonstand at the end
+# update 20210908: save different normalizations to separate versions
 
-full_data_process['energy_mean_air_nonstand'] = data_mean_training_validation_testing_y_nonstand
-full_data_process['energy_std_air_nonstand'] = data_std_training_validation_testing_y_nonstand
-full_data_process['energy_min_air_nonstand'] = data_min_training_validation_testing_y_nonstand
-full_data_process['energy_max_air_nonstand'] = data_max_training_validation_testing_y_nonstand
-full_data_process['energy_magnitude_air_nonstand'] = sector_max
-full_data_process['energy_vars'] = variables_export
-full_data_process['air_vars'] = ['pm25','pm10','so2','no2','co','o3','aqi']
+norm_data_process = {}
+norm_data_process['energy_norm_air'] = data_norm_training_validation_testing
+norm_data_process['energy_mean_air'] = data_mean_training_validation_testing
+norm_data_process['energy_std_air'] = data_std_training_validation_testing
+norm_data_process['energy_vars'] = variables_export
+norm_data_process['air_vars'] = ['pm25','pm10','so2','no2','co','o3','aqi']
+with open(data_dir+"process/data_process_dic"+char_name+"_norm.pickle", 'wb') as f:
+    pickle.dump(norm_data_process, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-full_data_process['energy_full_raw_data'] = energy_data_tensor
-data_raw_training_validation_testing = prepare_tensor_data(data, air_p_subset, pop_weights, variables_export)
-full_data_process['energy_raw_nonstand'] = data_raw_training_validation_testing
-full_data_process['energy_full_mean_by_station_var'] = mean_tensor
-full_data_process['energy_full_std_by_station_var'] = sd_tensor
-full_data_process['energy_full_weights'] = pop_weights.values[np.newaxis, :]
-full_data_process['north_city_index'] = north_city_index
+minmax_data_process = {}
+minmax_data_process['energy_minmax_air'] = data_minmax_training_validation_testing
+minmax_data_process['energy_min_air'] = data_min_training_validation_testing
+minmax_data_process['energy_max_air'] = data_max_training_validation_testing
+minmax_data_process['energy_vars'] = variables_export
+minmax_data_process['air_vars'] = ['pm25','pm10','so2','no2','co','o3','aqi']
+with open(data_dir+"process/data_process_dic"+char_name+"_minmax.pickle", 'wb') as f:
+    pickle.dump(minmax_data_process, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+const_data_process = {}
+const_data_process['energy_const_air'] = data_const_training_validation_testing
+const_data_process['energy_magnitude_air'] = sector_max
+const_data_process['energy_vars'] = variables_export
+const_data_process['air_vars'] = ['pm25','pm10','so2','no2','co','o3','aqi']
+with open(data_dir+"process/data_process_dic"+char_name+"_const.pickle", 'wb') as f:
+    pickle.dump(const_data_process, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+# I don't think these are used at all at later stages
+# full_data_process['energy_full_raw_data'] = energy_data_tensor
+# data_raw_training_validation_testing = prepare_tensor_data(data, air_p_subset, pop_weights, variables_export)
+# full_data_process['energy_raw'] = data_raw_training_validation_testing
+# full_data_process['energy_full_mean_by_station_var'] = mean_tensor
+# full_data_process['energy_full_std_by_station_var'] = sd_tensor
+# full_data_process['energy_full_weights'] = pop_weights.values[np.newaxis, :]
+# full_data_process['north_city_index'] = north_city_index
                           
-with open('../data/project2_energy_1812/process/full_data_process_dic'+char_name+'.pickle', 'wb') as full_data_process_dic:
-    pickle.dump(full_data_process, full_data_process_dic, protocol=pickle.HIGHEST_PROTOCOL)

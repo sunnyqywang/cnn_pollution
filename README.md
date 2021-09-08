@@ -11,42 +11,38 @@ This script gathers information from all runs (no matter normalization method an
 ## 1_preprocessing.py
 This script preprocess the data from folder project2_energy_1812, containing the following modules:
 1. Read stationIDs from stationID.xlsx
-2. Read energy and weather data from raw/(result/weather) by station. All sectors except for INDP were taken in. RUC and UBC are combined to RDC and RUN and UBN are combined to RDN. In total, the variables exported are .
+2. Read energy and weather data from raw/(result/weather) by station. All sectors except for INDP were taken in. RUC and UBC are combined to RDC and RUN and UBN are combined to RDN.
 3. Data exported to ''/process/energy_data_dic_(version characteristics string).pickle'
  - data (dictionary): {station : {sector : 61x61 energy/weather information matrix}}
  - characteristics string indicates different versions of the data
-4. Normalize matrix(image): Three normalization methods
+4. Normalize matrix (image): Three normalization methods
  - norm: each entry is normalized to its z-score
  - minmax: normalized by the max value of each sector - all values are then between 0-1
  - const: normalized by a constant value - taken to be the magnitude of the maximum of each sector
 5. Read pollution data from 'raw/air_quality_annual.xls'
  - get population weights from the column 'station_pop'
-6. Split the dataset into train, validation, test (6:2:2)
-7. Export to '/process/full_data_process_dic_(version characteristics string).pickle'
+ - air_p has 1400+ stations
+ - air_p_subset has 943 stations used for modelling
+6. Split the dataset into train, validation, test (3:1:1)
+ - stratified based on provincial region from 'raw/stationID_province_region.xlsx'
+7. Export to '/process/data_process_dic_(version characteristics string)_(normalization method).pickle'
  - dictionary:
+
  |dataset names (dictionary keys)| dataset (dictionary values)|
  |--------|--------|
- |energy_air_nonstand (used in the model)|input standardized, output raw, train-test-split data dictionary|
- |energy_air_stand|input standardized, output standardized, train-test-split data dictionary|
- |energy_mean_air_nonstand (used in the model)|mean of the image for each station, each sector, output variables raw, train-test-split data dictionary|
- |energy_mean_air_stand|mean of the image for each station, each sector, output variables standardized, train-test-split data dictionary|
- |energy_std_air_nonstand (used in the model)|std of the image for each station, each sector, output variables raw, train-test-split data dictionary|
- |energy_std_air_stand|std of the image for each station, each sector, output variables standardized, train-test-split data dictionary|
+ |energy_(norm/const/minmax)_air|input standardized, output raw, train-test-split data dictionary|
+ |energy_(mean/std/magnitude/min/max)_air|scale information for respective normalization methods|
  |energy_vars| a list of sector variables exported: ['AGC', 'AGN', 'AGO', 'INDCT', 'INDNT', 'INDOT', 'SVC', 'SVN', 'SVO', 'trans', 'RDC', 'RDN', 'DEM', 'rain', 'TEM']|
- |all_vars| a list of all air quality indicator names: ['pm25','pm10','so2','no2','co','o3','aqi']|
- |energy_full_raw_data|4D array of raw energy variables by (station, 61, 61, sector)|
- |energy_raw_nonstand|input raw, output raw, train-test-split data dictionary|
- |energy_full_mean_by_station_var|2D array of the mean of the energy variables by station, sector|
- |energy_full_std_by_station_var|2D array of the std of the energy variables by station, sector|
- |energy_full_weights|a list of station population|
- |north_city_index|a list of booleans indicating whether the station has clean city heating (proxy for station being in northern China)|
+ |air_vars| a list of all air quality indicator names: ['pm25','pm10','so2','no2','co','o3','aqi']|
+
  - Train-test-split data dictionary represents a data dictionary of the following format:
+ 
  |Name|Description|
  |--------|--------|
- |input_(training\|validation\|testing)|tensor of the shape (station code, sector, 61, 61)|
- |output_(training\|validation\|testing)|output of the pollution metrics|
- |index_(training\|validation\|testing)|station codes corresponding to training sample|
- |weight_(training\|validation\|testing)|population corresponding to the stations|
+ |input_(training/validation/testing)|tensor of the shape (station code, sector, 61, 61)|
+ |output_(training/validation/testing)|output of the pollution metrics|
+ |index_(training/validation/testing)|station codes corresponding to training sample|
+ |weight_(training/validation/testing)|population corresponding to the stations|
 
 ## 2_cnn_hyper_models.py
 This script builds the CNN and does hyperparameter searching.
