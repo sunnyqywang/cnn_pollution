@@ -234,6 +234,7 @@ with open(data_dir+"process/data_process_dic"+char_name+"_norm.pickle", 'wb') as
 
 minmax_data_process = {}
 minmax_data_process['energy_minmax_air'] = data_minmax_training_validation_testing
+minmax_data_process['energy_mean_air'] = data_mean_training_validation_testing
 minmax_data_process['energy_min_air'] = data_min_training_validation_testing
 minmax_data_process['energy_max_air'] = data_max_training_validation_testing
 minmax_data_process['energy_vars'] = variables_export
@@ -243,6 +244,7 @@ with open(data_dir+"process/data_process_dic"+char_name+"_minmax.pickle", 'wb') 
 
 const_data_process = {}
 const_data_process['energy_const_air'] = data_const_training_validation_testing
+const_data_process['energy_mean_air'] = data_mean_training_validation_testing
 const_data_process['energy_magnitude_air'] = sector_max
 const_data_process['energy_vars'] = variables_export
 const_data_process['air_vars'] = ['pm25','pm10','so2','no2','co','o3','aqi']

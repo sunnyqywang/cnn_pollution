@@ -27,7 +27,7 @@ def prepare_tensor_data(input_data_dic, output_data_df, pop_weights, all_variabl
     n_channel = len(all_variables)
 
     # initialize input tensor (data_standard_dic or data_dic)
-    input_tensor = np.zeros((n_station, image_height, image_width, n_channel))
+    input_tensor = np.zeros((n_station, n_channel) + list(list(input_data_dic.values())[0].values())[0].shape)
     # initialize output tensor
     output_tensor = np.zeros(output_data_df.shape)
     # initialize the order and station_name
@@ -39,11 +39,14 @@ def prepare_tensor_data(input_data_dic, output_data_df, pop_weights, all_variabl
         index_station_code_list.append(key)
         for j in range(len(all_variables)):
             var_ = all_variables[j]
-            input_tensor[i, :, :, j] = input_data_dic[key][var_]
+            input_tensor[i, j] = input_data_dic[key][var_]
     # index_station_code_array
     index_station_code_array = np.array(index_station_code_list)
     # sort pop_weights according to index_station_code_array
     pop_weights_sorted = pop_weights[index_station_code_array]
+
+    # Move channels to the last axis
+    input_tensor = np.moveaxis(input_tensor, 1, -1)
 
     # split training and testing set; 4/5 for training,  1/5 for testing
     # index_city_final is the corresponding index of input tensors

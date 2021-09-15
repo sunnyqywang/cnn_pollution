@@ -72,7 +72,7 @@ def augment_images(images, outputs, weights, scale_info, additional_image_size, 
             old = old_X_scale[j]
             new_X_scale[j] = np.concatenate([new_X_scale[j], old[np.newaxis, :], old[np.newaxis, :], old[np.newaxis, :]], axis = 0) # 3 times for three new observations added
 
-    return new_images,new_outputs,new_weights,new_X_scale
+    return new_images, new_outputs, new_weights, new_X_scale
 
 
 def add_convolutional_layer(input_layer,

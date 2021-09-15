@@ -50,7 +50,7 @@ This script builds the CNN and does hyperparameter searching.
 Notes:
 - The mean and standard deviation was scaled down by 10000 in order to make training easier. (since images are scaled to [0,1])
 - Hyperparameter space (original, later shrinked see script for the shortened search space):
-    - Number of iterations: n_iterations_list = [100, 300, 500, 1000]
+    - Number of iterations: n_iterations_list = [2000] (each iteration is a batch)
     - Number of mini batch: n_mini_batch_list = [20, 50, 100, 200]
     - Number of convolutional layers: conv_layer_number_list = [1,2,3,4,5]
     - Number of filters for convolutional layers: conv_filter_number_list=[20,50,80,100]
@@ -67,19 +67,21 @@ Notes:
     - Number of images to augment: additional_image_size_list = [50,100,200]
     - Noise to add to the augmented image: epsilon_variance_list = [0.05,0.1,0.2]
 - Output: For each model:
-    - results_(output_var)\_(output_radius)/model_output_hyper_searching_dic_(model_number).pickle
+    - results_(output_var)\_(output_radius)\_(linear_coef)/model_output_hyper_searching_dic_(model_number).pickle
         - contains a tuple: (model_output, hyperparameters, hyperparameter names)
         - model_output is a dictionary
+    
         |key|value|
         |---|---|
-        |output_(training\|validation\|testing)|output of the model|
-        |(training\|validation\|testing)\_loss_list|losses at each 50th iteration|
+        |output_(training/validation/testing)|output of the model|
+        |(training/validation/testing)\_loss_list|losses at each epoch (each time entire dataset is through)|
+
     - note some runs output_train will have more entries because of data augmentation, the first 565 is the original
-    - file of the models: models/model_(model_number).ckpt
+    - file of the models: models/models_(output_var)\_(output_radius)\_(linear_coef)/model_(model_number)_(iteration_number).ckpt
 
 
 ## 3_combine_results.py
-This script combines the results of all runs in step 2 if the whole set is finished in multiple runs.
+This script combines the results of all hyperparameter search runs in step 2 if the whole set is finished in multiple runs.
 
 Output:
 1. model_output_hyper_searching_dic_(output_var)\_(output_radius).pickle
