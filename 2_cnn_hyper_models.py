@@ -4,6 +4,7 @@ Run CNN models
 @author: shenhao/qingyi
 """
 
+import itertools
 import glob
 import pandas as pd
 import numpy as np
@@ -25,20 +26,22 @@ variables_export = ['COAL', 'INDCT', 'INDOT', 'SVC', 'OIL', 'DEM', 'rain', 'TEM'
 output_folder = '210908'
 standard = 'const'
 #output_vars = ['pm25', 'pm10', 'so2', 'no2', 'co', 'o3', 'aqi']
-output_vars = [0]#[1,2,3,4,5]
+output_vars = [0,1,2,3,4,5]
 image_radius = 30 # max 30
-linear_coef_list = [0]
+linear_coefs = [0,0.25,0.5,0.75,1]
+import_hyperparameters = 121
+multitask_learning = True
 
 ### 0. read data
 with open(data_dir+"process/data_process_dic"+char_name+"_"+standard+".pickle", 'rb') as data_standard:
     data_full_package = pickle.load(data_standard)
 
 def train_cnn(idx, train_images, train_y, train_weights, validation_images, validation_y, validation_weights, test_images, test_y, test_weights,
-              scale_info, hyperparams, output_var):
+              scale_info, hyperparams, output_var, linear_coef, import_hyperparameters):
 
     (n_iterations, n_mini_batch, conv_layer_number, pool_list, conv_filter_number, conv_kernel_size, \
      conv_stride, pool_size, pool_stride, drop, dropout_rate, bn, fc_layer_number, n_fc, \
-     augment, additional_image_size, epsilon_variance, standard, linear_coef) = hyperparams
+     augment, additional_image_size, epsilon_variance, standard) = hyperparams
 
     # augment images
     if standard == 'minmax':
@@ -63,7 +66,7 @@ def train_cnn(idx, train_images, train_y, train_weights, validation_images, vali
                 augment_images(train_images, train_y, train_weights, [train_mean_images], additional_image_size, epsilon_variance)
 
     ## build model here
-    # tf.reset_default_graph()
+    tf.reset_default_graph()
     _,image_height,image_width,n_channel = train_images.shape
     _,n_air_variables = train_y.shape
     training_loss_list = []
@@ -189,10 +192,10 @@ def train_cnn(idx, train_images, train_y, train_weights, validation_images, vali
 
                 ## save models
                 if best_epoch == iteration:
-                    saver.save(sess, output_dir+output_folder+"/models/models_"+str(output_var)+"_"+str(image_radius)+"_"+str(linear_coef)+
-                               "/model_"+str(idx)+"_"+str(iteration)+".ckpt")
-                    files = glob.glob(output_dir+output_folder+"/models/models_"+str(output_var)+"_"+str(image_radius)+"_"+str(linear_coef)+
-                                      "/model_"+str(idx)+"_*.ckpt*")
+                    saver.save(sess, output_dir+output_folder+"/models/models_"+str(output_var)+"_"+str(image_radius)+
+                               "/model_"+str(linear_coef) +"_"+str(import_hyperparameters) + "_" +str(idx)+"_"+str(iteration)+".ckpt")
+                    files = glob.glob(output_dir+output_folder+"/models/models_"+str(output_var)+"_"+str(image_radius)+
+                                      "/model_"+str(linear_coef)+"_"+str(import_hyperparameters)+"_"+str(idx)+"_*.ckpt*")
 
         for f in files:
             e = int(f.split("_")[-1].split(".")[0])
@@ -219,7 +222,7 @@ def train_cnn(idx, train_images, train_y, train_weights, validation_images, vali
     return model_output
 
 
-for output_var in output_vars:
+for output_var, linear_coef in itertools.product(output_vars, linear_coefs):
     lb = 30-image_radius
     ub = 30+image_radius+1
     # use standardized energy data and non-standardized air pollution data
@@ -285,22 +288,34 @@ for output_var in output_vars:
 
     hp = list(itertools.product(n_iterations_list,n_mini_batch_list,conv_layer_number_list,conv_filter_number_list,conv_kernel_size_list,\
                       conv_stride_list, pool_size_list, pool_stride_list, drop_list, dropout_rate_list, bn_list, \
-                      fc_layer_number_list, n_fc_list, augment_list, additional_image_size_list, epsilon_variance_list, linear_coef_list))
+                      fc_layer_number_list, n_fc_list, augment_list, additional_image_size_list, epsilon_variance_list))
 
-    n_hyperparam_searching = -1 # -1 means all; >0 means randomly sampled combos
-    start_idx = 0
-    if n_hyperparam_searching == -1:
-        n_hyperparam_searching = len(hp)
+    if import_hyperparameters is None:
+        n_hyperparam_searching = -1 # -1 means all; >0 means randomly sampled combos
+        if n_hyperparam_searching == -1:
+            n_hyperparam_searching = len(hp)
+        else:
+            idx = np.random.choice(np.arange(len(hp)), n_hyperparam_searching)
+            hp = [hp[a] for a in idx]
     else:
-        idx = np.random.choice(np.arange(len(hp)), n_hyperparam_searching)
-        hp = [hp[a] for a in idx]
+        # import linear coef = 0
+        with open(output_dir+output_folder+'/results/results_'+str(output_var)+'_'+str(image_radius)+
+                  '/model_output_hyper_searching_dic_0_' + str(import_hyperparameters)+'.pickle', 'rb') as f:
+            hp = pkl.load(f)[1]
+        # the number of times this set of hyperparameters will be repeated.
+        n_hyperparam_searching = 20
 
-    for idx in range(start_idx, n_hyperparam_searching):
+    for idx in range(n_hyperparam_searching):
         print("The current index is: ", idx, " out of total ", n_hyperparam_searching)
+
         if hp is not None:
-            (n_iterations, n_mini_batch, conv_layer_number, conv_filter_number, conv_kernel_size, conv_stride, \
-            pool_size, pool_stride, drop, dropout_rate, bn, fc_layer_number, n_fc, augment, additional_image_size,\
-            epsilon_variance, linear_coef) = hp[idx]
+            if import_hyperparameters is None:
+                hp_cur = hp[idx]
+            else:
+                hp_cur = hp
+            (n_iterations, n_mini_batch, conv_layer_number, pool_list, conv_filter_number, conv_kernel_size, \
+             conv_stride, pool_size, pool_stride, drop, dropout_rate, bn, fc_layer_number, n_fc, \
+             augment, additional_image_size, epsilon_variance, standard) = hp_cur
         else:
             n_iterations = np.random.choice(n_iterations_list)
             n_mini_batch = np.random.choice(n_mini_batch_list)
@@ -322,18 +337,18 @@ for output_var in output_vars:
             additional_image_size=np.random.choice(additional_image_size_list)
             epsilon_variance=np.random.choice(epsilon_variance_list)
             #
-            linear_coef = np.random.choice(linear_coef_list)
+
         #
         pool_list=np.random.choice([True], size=conv_layer_number)
 
         # hyper
         hyperparams=(n_iterations, n_mini_batch, conv_layer_number, pool_list, conv_filter_number, conv_kernel_size, \
                      conv_stride, pool_size, pool_stride, drop, dropout_rate, bn, fc_layer_number, n_fc, \
-                     augment, additional_image_size, epsilon_variance, standard, linear_coef)
+                     augment, additional_image_size, epsilon_variance, standard)
 
         hyperparams_names=('n_iterations', 'n_mini_batch', 'conv_layer_number', 'pool_list', 'conv_filter_number', 'conv_kernel_size', \
                            'conv_stride', 'pool_size', 'pool_stride', 'drop', 'dropout_rate', 'bn', 'fc_layer_number', 'n_fc', \
-                           'augment', 'additional_image_size', 'epsilon_variance', 'standard_method', 'linear_coef')
+                           'augment', 'additional_image_size', 'epsilon_variance', 'standard_method')
 
         # Train CNN
         if standard == 'minmax':
@@ -343,14 +358,21 @@ for output_var in output_vars:
         elif standard == 'const':
             scale_info = (train_mean_images, validation_mean_images, test_mean_images)
 
-        if not os.path.exists(output_dir+output_folder+"/models/models_"+str(output_var)+"_"+str(image_radius)+"_"+str(linear_coef)+"/"):
-            os.mkdir(output_dir+output_folder+"/models/models_"+str(output_var)+"_"+str(image_radius)+"_"+str(linear_coef))
+        if not os.path.exists(output_dir+output_folder+"/models/models_"+str(output_var)+"_"+str(image_radius)+"/"):
+            os.mkdir(output_dir+output_folder+"/models/models_"+str(output_var)+"_"+str(image_radius))
 
         model_output = train_cnn(idx, train_images, train_y, train_weights, validation_images, validation_y, validation_weights,
-                                 test_images, test_y, test_weights, scale_info, hyperparams, output_var)
-        model_output_hyper_searching[str(idx)] = (model_output,hyperparams,hyperparams_names)
-        if not os.path.exists(output_dir+output_folder+"/results/results_"+str(output_var)+"_"+str(image_radius)+"_"+str(linear_coef)+"/"):
-            os.mkdir(output_dir+output_folder+"/results/results_"+str(output_var)+"_"+str(image_radius)+"_"+str(linear_coef))
-        with open(output_dir+output_folder+'/results/results_'+str(output_var)+'_'+str(image_radius)+"_"+str(linear_coef)+'/model_output_hyper_searching_dic_' + str(idx) +'.pickle', 'wb') as model_output_hyper_searching_dic:
-            pickle.dump(model_output_hyper_searching[str(idx)], model_output_hyper_searching_dic, protocol=pickle.HIGHEST_PROTOCOL)
+                                 test_images, test_y, test_weights, scale_info, hyperparams, output_var, linear_coef, import_hyperparameters)
+        model_output_hyper_searching[str(idx)] = (model_output,hyperparams,hyperparams_names,linear_coef)
+
+        if not os.path.exists(output_dir+output_folder+"/results/results_"+str(output_var)+"_"+str(image_radius)+"/"):
+            os.mkdir(output_dir+output_folder+"/results/results_"+str(output_var)+"_"+str(image_radius))
+        if import_hyperparameters is None:
+            with open(output_dir+output_folder+'/results/results_'+str(output_var)+'_'+str(image_radius)+
+                      "/model_output_hyper_searching_dic_"+str(linear_coef)+"_"+str(idx)+'.pickle', 'wb') as model_output_hyper_searching_dic:
+                pickle.dump(model_output_hyper_searching[str(idx)], model_output_hyper_searching_dic, protocol=pickle.HIGHEST_PROTOCOL)
+        else:
+            with open(output_dir+output_folder+'/results/results_'+str(output_var)+'_'+str(image_radius)+
+                      '/model_output_hyper_searching_dic_'+str(linear_coef)+"_"+str(import_hyperparameters)+"_"+str(idx)+'.pickle', 'wb') as model_output_hyper_searching_dic:
+                pickle.dump(model_output_hyper_searching[str(idx)], model_output_hyper_searching_dic, protocol=pickle.HIGHEST_PROTOCOL)
 
