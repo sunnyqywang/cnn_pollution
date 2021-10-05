@@ -6,7 +6,31 @@ utilities for data preprocessing
 
 
 import numpy as np
+import pandas as pd
 from sklearn.model_selection import StratifiedKFold
+from setup import *
+
+def get_control_variables(filename, train_index, validation_index, test_index):
+    control_var = pd.read_excel(data_dir + 'raw/' + filename)
+    control_var = control_var[
+        ["station_code", "fertilizer_area", "N_fertilizer_area", "livestock_area", "poultry_area", "pcGDP"]]
+
+    # Control scale
+    control_var["fertilizer_area"] /= 100
+    control_var["N_fertilizer_area"] /= 100
+    control_var["livestock_area"] /= 1000
+    control_var["poultry_area"] /= 1000
+    control_var["pcGDP"] /= 100000
+
+    control_scale = [2,2,3,3,5]
+    control_var = control_var.set_index("station_code")
+    control_var = control_var.fillna(0)
+
+    control_var_training = control_var.loc[train_index].to_numpy()
+    control_var_validation = control_var.loc[validation_index].to_numpy()
+    control_var_testing = control_var.loc[test_index].to_numpy()
+
+    return control_var_training, control_var_validation, control_var_testing, control_scale
 
 def prepare_tensor_data(input_data_dic, output_data_df, pop_weights, all_variables, stratify=None):
     '''

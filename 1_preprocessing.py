@@ -15,7 +15,7 @@ import sys
 from setup import *
 from util_data import *
 
-date = '210908'
+# Last Update: 210930
 char_name = '_no_airport_no_gas_coal_combined_oil_combined'
 
 # 20060601, 210908
@@ -24,9 +24,9 @@ variables_export = ['COAL', 'INDCT',
                     'DEM', 'rain', 'TEM']
 
 # not used, 20060602
-variables_export = ['RDC', 'AGC', 'AGO', 'INDCT',
-                    'INDOT', 'SVC', 'SVOtrans',
-                    'DEM', 'rain', 'TEM']
+# variables_export = ['RDC', 'AGC', 'AGO', 'INDCT',
+#                     'INDOT', 'SVC', 'SVOtrans',
+#                     'DEM', 'rain', 'TEM']
 
 # airport ID10
 airport = pd.read_csv(data_dir+"raw/airport.csv")

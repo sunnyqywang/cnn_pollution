@@ -7,14 +7,17 @@ from sklearn.metrics import mean_squared_error
 import util_performance
 import matplotlib.pyplot as plt
 from setup import *
+from setup_cnn import *
 
 standard = 'const'
-output_folder = '210921'
+output_folder = '210930'
 char_name = '_no_airport_no_gas_coal_combined_oil_combined'
-output_var_names_all = ['pm25', 'pm10', 'so2', 'no2', 'co', 'o3', 'aqi']
 output_var = [0]
 output_var_names = [output_var_names_all[ov] for ov in output_var]
 image_radius = 30
+run_suffix = "_withinit"
+
+import_hyperparameters = 153
 
 cnn_data_name = 'energy_'+standard+'_air'
 with open(data_dir+"process/data_process_dic"+char_name+"_"+standard+".pickle", "rb") as data_standard:
@@ -41,8 +44,13 @@ test_mean_images = input_mean_testing / 10000
 #         model_output_hyper_searching = pickle.load(f)
 # else:
 #     model_output_hyper_searching = {}
-files = glob.glob(output_dir+output_folder+'/results/results_'+"".join([str(ov) for ov in output_var])+'_'+str(image_radius)+
-              '/model_output_hyper_searching_dic_*_*.pickle')
+if import_hyperparameters is None:
+    files = glob.glob(output_dir+output_folder+'/results/results_'+"".join([str(ov) for ov in output_var])+'_'+str(image_radius)+
+                  '/model_output_hyper_searching_dic_*'+run_suffix+'.pickle')
+else:
+    files = glob.glob(
+        output_dir + output_folder + '/results/results_' + "".join([str(ov) for ov in output_var]) + '_' + str(
+            image_radius) + '/model_output_hyper_searching_dic_*_' + str(import_hyperparameters) + '_*'+run_suffix+'.pickle')
 
 cnn_train_loss_list = []
 cnn_validation_loss_list = []
@@ -60,12 +68,12 @@ for f in files:
     # if 7 then it is part of the hyperparameter search phase, the hp combo is run only once
     # if 8 the additional parameter is the model number of hp re-run
     temp = f.split("/")[-1].split("_")
-    if len(temp) == 7:
-        idx_list.append(temp[-1].split(".")[0])
-        hp_idx_list.append(idx_list[-1])
-    else:
-        idx_list.append(temp[-1].split(".")[0])
+    if len(temp) == 8:
+        idx_list.append("-1")
         hp_idx_list.append(temp[-2])
+    else:
+        idx_list.append(temp[-2])
+        hp_idx_list.append(temp[-3])
 
     with open(f, "rb") as model_output_hyper_searching_dic:
         model_output_hyper_searching = pickle.load(model_output_hyper_searching_dic)
@@ -130,9 +138,15 @@ for m in ['train_mse','val_mse','test_mse','train_r2','val_r2','test_r2']:
     for v in output_var_names:
         col_df += [m+'_'+v]
 
-cnn_performance_table = pd.DataFrame(np_df, columns = col_df)\
-    .sort_values(by=['linear_coef', rank_var], ascending=True).to_csv(output_dir+output_folder+\
-    '/results/cnn_performance_table_'+"".join([str(ov) for ov in output_var])+'_'+str(image_radius)+'.csv', index=False)
+if import_hyperparameters is None:
+    cnn_performance_table = pd.DataFrame(np_df, columns = col_df)\
+        .sort_values(by=['linear_coef', rank_var], ascending=True).to_csv(output_dir+output_folder+\
+        '/results/cnn_performance_table_'+"".join([str(ov) for ov in output_var])+'_'+str(image_radius)+run_suffix+'.csv', index=False)
+else:
+    cnn_performance_table = pd.DataFrame(np_df, columns = col_df)\
+        .sort_values(by=['linear_coef', rank_var], ascending=True).to_csv(output_dir+output_folder+\
+        '/results/cnn_performance_table_'+"".join([str(ov) for ov in output_var])+'_'+str(image_radius)+'_'+
+        str(import_hyperparameters)+run_suffix+'.csv', index=False)
 
 # if not combined:
 #     with open(output_dir + output_folder + "/results/results_"+"".join([str(ov) for ov in output_var])+'_'+str(image_radius)+

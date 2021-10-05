@@ -1,3 +1,5 @@
+output_var_names_all = ['pm25', 'pm10', 'so2', 'no2', 'co', 'o3', 'aqi']
+
 # hyperparameter space
 n_iterations_list = [2000]
 n_mini_batch_list = [64]

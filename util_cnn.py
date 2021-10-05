@@ -103,9 +103,12 @@ def add_convolutional_layer(input_layer,
     return output_layer
 
 
-def add_fc_layer(input_layer, n_fc):
+def add_fc_layer(input_layer, n_fc, init_mtx=None):
     # fully connected layer
-    input_layer = tf.layers.dense(input_layer, n_fc, activation=tf.nn.relu)
+    if init_mtx is None:
+        input_layer = tf.layers.dense(input_layer, n_fc, activation=tf.nn.relu)
+    else:
+        input_layer = tf.layers.dense(input_layer, n_fc, activation=tf.nn.relu, kernel_initializer=init_mtx)
     return input_layer
 
 def get_ensembled_prediction(output_folder, output_var, radius, num_models, train_size):

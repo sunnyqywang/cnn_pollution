@@ -12,6 +12,8 @@ import tensorflow as tf
 import pickle
 import itertools
 import os
+
+import util_data
 from util_cnn import *
 from setup import *
 # setup_cnn: cnn hyperparameters
@@ -22,19 +24,23 @@ config.gpu_options.allow_growth=True
 #tf.debugging.set_log_device_placement(True)
 
 char_name = '_no_airport_no_gas_coal_combined_oil_combined'
-variables_export = ['COAL', 'INDCT', 'INDOT', 'SVC', 'OIL', 'DEM', 'rain', 'TEM']
-output_folder = '210921'
+# variables_export = ['COAL', 'INDCT', 'INDOT', 'SVC', 'OIL', 'DEM', 'rain', 'TEM']
+output_folder = '210930'
 standard = 'const'
 #output_vars = ['pm25', 'pm10', 'so2', 'no2', 'co', 'o3', 'aqi']
 output_vars = [[0]]#[[0,1,2,3,4,5]]
 image_radius = 30 # max 30
-linear_coefs = [0,0.01,0.1,0.2,0.25]
+linear_coefs = [0,0.01,0.1,0.2,0.25,0.5,0.75,0.9,0.95]
+# linear_coefs = [0]
 # if import_hyperparameters is not None, then import the hyperparameter # in the saved models (with the same radius and output variable(s))
-import_hyperparameters = 64
-# if import_hyperparamters is None, then do a search of hyperparameters
-# if import_hyperparameter is not None, this parameter does not do anything
-n_hyperparam_searching = -1  # -1 means all; >0 means randomly sampled combos
+import_hyperparameters = 153
+run_suffix = "_linearfix"
 
+# if import_hyperparamters is None, then do a search of hyperparameters
+# -1 means all; >0 means randomly sampled combos
+# if import_hyperparameter is not None, this parameter represents the number of times that this set of hyperparameters will be repeated.
+n_hyperparam_searching = 30
+start_parameter = 0
 
 ### 0. read data
 with open(data_dir+"process/data_process_dic"+char_name+"_"+standard+".pickle", 'rb') as data_standard:
@@ -73,7 +79,7 @@ def train_cnn(idx, train_images, train_y, train_weights, validation_images, vali
     tf.reset_default_graph()
     _,image_height,image_width,n_channel = train_images.shape
     _,n_air_variables = train_y.shape
-    _,n_control_var = control_var.shape
+    _,n_control_var = control_var_training.shape
     training_loss_list = []
     validation_loss_list = []
     testing_loss_list = []
@@ -116,19 +122,26 @@ def train_cnn(idx, train_images, train_y, train_weights, validation_images, vali
         input_layer = add_fc_layer(input_layer, n_fc)
         input_layer = add_fc_layer(input_layer, n_fc)
 
-    with tf.name_scope("linear_part"):
-        linear_part = add_fc_layer(X_mean, n_air_variables)
-
     with tf.name_scope("outputs"):
         # reduce to vector prediction
         # dim of output: N*n_air_variables
         bias = tf.Variable(tf.random_normal([n_air_variables]), name='bias')
-        output = tf.layers.dense(input_layer, n_air_variables)*(1-linear_coef) + linear_part*linear_coef + bias
-        output = tf.identity(output, name='output')
+        # init = tf.constant_initializer([0.00258922454, -1.25796299e-05, -0.000169064926, -0.00040304034, 0.00070013143,\
+        #     -0.000477985298, -0.000117271471, -0.0982265421, 23.9178895, -18.9303794, 9.42604944, 0.45162213, 5.10710306])
+        # linear_part = add_fc_layer(X_mean, n_air_variables, init_mtx=init)
+        linear_fix = tf.constant([0.00258922454, -1.25796299e-05, -0.000169064926, -0.00040304034, 0.00070013143,\
+            -0.000477985298, -0.000117271471, -0.0982265421, 23.9178895, -18.9303794, 9.42604944, 0.45162213, 5.10710306],
+            shape=(n_channel+n_control_var,1))
+        linear_part = tf.linalg.matmul(X_mean, linear_fix)
+        linear_part = tf.identity(linear_part, name='linear_part')
+        cnn_part = tf.layers.dense(input_layer, n_air_variables)
+        cnn_part = tf.identity(cnn_part, name='cnn_part')
+        output = cnn_part*(1-linear_coef) + linear_part*linear_coef + bias
+        output = tf.identity(output, name='final_output')
 
     with tf.name_scope("train"):
         # use L2 distance between two matrices as loss
-        loss = tf.losses.mean_squared_error(y, output, weights = weights)
+        loss = tf.losses.mean_squared_error(y, output, weights=weights)
 
     optimizer = tf.train.AdamOptimizer()
     training_op = optimizer.minimize(loss)
@@ -197,10 +210,18 @@ def train_cnn(idx, train_images, train_y, train_weights, validation_images, vali
 
                 ## save models
                 if best_epoch == iteration:
-                    saver.save(sess, output_dir+output_folder+"/models/models_"+"".join([str(ov) for ov in output_var])+"_"+str(image_radius)+
-                               "/model_"+str(linear_coef) +"_"+str(import_hyperparameters) + "_" +str(idx)+"_"+str(iteration)+".ckpt")
-                    files = glob.glob(output_dir+output_folder+"/models/models_"+"".join([str(ov) for ov in output_var])+"_"+str(image_radius)+
-                                      "/model_"+str(linear_coef)+"_"+str(import_hyperparameters)+"_"+str(idx)+"_*.ckpt*")
+                    if import_hyperparameters is not None:
+                        saver.save(sess, output_dir+output_folder+"/models/models_"+"".join([str(ov) for ov in output_var])+"_"+str(image_radius)+
+                                   "/model_"+str(linear_coef) +"_"+str(import_hyperparameters) + "_" +str(idx)+"_withinit_"+str(iteration)+".ckpt")
+                        files = glob.glob(output_dir+output_folder+"/models/models_"+"".join([str(ov) for ov in output_var])+"_"+str(image_radius)+
+                                          "/model_"+str(linear_coef)+"_"+str(import_hyperparameters)+"_"+str(idx)+"_withinit_*.ckpt*")
+                    else:
+                        saver.save(sess, output_dir + output_folder + "/models/models_" + "".join(
+                            [str(ov) for ov in output_var]) + "_" + str(image_radius) +
+                                   "/model_" + str(linear_coef) + "_" + str(idx) + "_hp_" + str(iteration) + ".ckpt")
+                        files = glob.glob(output_dir + output_folder + "/models/models_" + "".join(
+                            [str(ov) for ov in output_var]) + "_" + str(image_radius) +
+                                   "/model_" + str(linear_coef) + "_"  + str(idx) + "_hp_*.ckpt*")
 
         for f in files:
             e = int(f.split("_")[-1].split(".")[0])
@@ -223,27 +244,15 @@ def train_cnn(idx, train_images, train_y, train_weights, validation_images, vali
         model_output['validation_loss_list'] = validation_loss_list
         model_output['testing_loss_list'] = testing_loss_list
 
-
     return model_output
 
 cnn_data_name = 'energy_'+standard+'_air'
 
-control_var = pd.read_excel(data_dir+'raw/agriculture_variables_station.xlsx')
-control_var = control_var[["station_code","fertilizer_area","N_fertilizer_area","livestock_area","poultry_area","pcGDP"]]
-
-# Control scale
-control_var["fertilizer_area"] /= 100
-control_var["N_fertilizer_area"] /= 100
-control_var["livestock_area"] /= 1000
-control_var["poultry_area"] /= 1000
-control_var["pcGDP"] /= 100000
-
-control_var = control_var.set_index("station_code")
-control_var = control_var.fillna(0)
-
-control_var_training = control_var.loc[data_full_package[cnn_data_name]['index_training']].to_numpy()
-control_var_validation = control_var.loc[data_full_package[cnn_data_name]['index_validation']].to_numpy()
-control_var_testing = control_var.loc[data_full_package[cnn_data_name]['index_testing']].to_numpy()
+control_var_training, control_var_validation, control_var_testing, control_scale = \
+    util_data.get_control_variables(filename='agriculture_variables_station.xlsx',
+                                train_index=data_full_package[cnn_data_name]['index_training'],
+                                validation_index=data_full_package[cnn_data_name]['index_validation'],
+                                test_index=data_full_package[cnn_data_name]['index_testing'])
 
 for output_var, linear_coef in itertools.product(output_vars, linear_coefs):
     lb = 30-image_radius
@@ -321,12 +330,11 @@ for output_var, linear_coef in itertools.product(output_vars, linear_coefs):
     else:
         # import linear coef = 0
         with open(output_dir+output_folder+'/results/results_'+"".join([str(ov) for ov in output_var])+'_'+str(image_radius)+
-                  '/model_output_hyper_searching_dic_0_' + str(import_hyperparameters)+'.pickle', 'rb') as f:
+                  '/model_output_hyper_searching_dic_0_' + str(import_hyperparameters)+'_hp.pickle', 'rb') as f:
             hp = pkl.load(f)[1]
-        # the number of times this set of hyperparameters will be repeated.
-        n_hyperparam_searching = 20
 
-    for idx in range(0, n_hyperparam_searching):
+
+    for idx in range(start_parameter, n_hyperparam_searching):
         print("The current index is: ", idx, " out of total ", n_hyperparam_searching)
 
         if hp is not None:
@@ -387,19 +395,22 @@ for output_var, linear_coef in itertools.product(output_vars, linear_coefs):
         if not os.path.exists(output_dir+output_folder+"/models/models_"+"".join([str(ov) for ov in output_var])+"_"+str(image_radius)+"/"):
             os.mkdir(output_dir+output_folder+"/models/models_"+"".join([str(ov) for ov in output_var])+"_"+str(image_radius))
 
-        model_output = train_cnn(idx, train_images, train_y, train_weights, validation_images, validation_y, validation_weights,
-                                 test_images, test_y, test_weights, scale_info, control_var_training, control_var_validation, control_var_testing,
+        model_output = train_cnn(idx, train_images, train_y, train_weights, validation_images, validation_y,
+                                 validation_weights,
+                                 test_images, test_y, test_weights, scale_info, control_var_training,
+                                 control_var_validation, control_var_testing,
                                  hyperparams, output_var, linear_coef, import_hyperparameters)
+
         model_output_hyper_searching[str(idx)] = (model_output,hyperparams,hyperparams_names,linear_coef)
 
         if not os.path.exists(output_dir+output_folder+"/results/results_"+"".join([str(ov) for ov in output_var])+"_"+str(image_radius)+"/"):
             os.mkdir(output_dir+output_folder+"/results/results_"+"".join([str(ov) for ov in output_var])+"_"+str(image_radius))
         if import_hyperparameters is None:
             with open(output_dir+output_folder+'/results/results_'+"".join([str(ov) for ov in output_var])+'_'+str(image_radius)+
-                      "/model_output_hyper_searching_dic_"+str(linear_coef)+"_"+str(idx)+'.pickle', 'wb') as model_output_hyper_searching_dic:
+                      "/model_output_hyper_searching_dic_"+str(linear_coef)+"_"+str(idx)+'_hp.pickle', 'wb') as model_output_hyper_searching_dic:
                 pickle.dump(model_output_hyper_searching[str(idx)], model_output_hyper_searching_dic, protocol=pickle.HIGHEST_PROTOCOL)
         else:
             with open(output_dir+output_folder+'/results/results_'+"".join([str(ov) for ov in output_var])+'_'+str(image_radius)+
-                      '/model_output_hyper_searching_dic_'+str(linear_coef)+"_"+str(import_hyperparameters)+"_"+str(idx)+'.pickle', 'wb') as model_output_hyper_searching_dic:
+                      '/model_output_hyper_searching_dic_'+str(linear_coef)+"_"+str(import_hyperparameters)+"_"+str(idx)+'_withinit.pickle', 'wb') as model_output_hyper_searching_dic:
                 pickle.dump(model_output_hyper_searching[str(idx)], model_output_hyper_searching_dic, protocol=pickle.HIGHEST_PROTOCOL)
 
