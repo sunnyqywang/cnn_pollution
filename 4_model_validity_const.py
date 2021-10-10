@@ -1,20 +1,42 @@
+import glob
 import numpy as np
-import pickle
-import tensorflow as tf
-import matplotlib.pyplot as plt
+import os
 import pandas as pd
+import pickle
+import sys
+import tensorflow as tf
+
+from setup import *
+from setup_cnn import *
+import util_data
 
 config = tf.ConfigProto()
 config.gpu_options.allow_growth=True
 tf.debugging.set_log_device_placement(True)
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-output_folder = "200905"
-output_var = 0
-radius = 20
+output_folder = "210930"
+output_var = [0]
+output_var_name = output_var_names_all[output_var[0]]
+if len(output_var) > 1:
+    print("Multiple outputs not accomodated. Exiting...")
+    sys.exit()
 
-run_dir = "../output/"+output_folder+"/models/models_" + str(output_var) + "_" + str(radius)
-cnn_results = pd.read_csv("../output/"+output_folder+"/results/cnn_performance_table_"+str(output_var)+"_"+str(radius)+".csv")
-best_val = cnn_results['validation_mse'].iloc[0]
+radius = 30
+standard = 'const'
+run_suffix = '_linearfix'
+import_hyperparameters = 153
+
+run_dir = output_dir+output_folder+"/models/models_" + "".join([str(ov) for ov in output_var]) + "_" + str(radius)
+if import_hyperparameters is None:
+    cnn_results = pd.read_csv(output_dir+output_folder+"/results/cnn_performance_table_"+"".join([str(ov) for ov in output_var])\
+                          +"_"+str(radius)+run_suffix+".csv")
+else:
+    cnn_results = pd.read_csv(
+        output_dir + output_folder + "/results/cnn_performance_table_" + "".join([str(ov) for ov in output_var]) \
+        + "_" + str(radius) + "_" + str(import_hyperparameters) + run_suffix + ".csv")
+cnn_results = cnn_results.sort_values(by='val_mse_'+output_var_name)
+best_val = cnn_results['val_mse_'+output_var_name].iloc[0]
 
 # indices of variables to modify in scenario testing
 # industrial coal, transportation, residential coal
@@ -66,6 +88,7 @@ scenario_variables = [0,1,4]
 variables_export = ['COAL', 'INDCT',
                     'INDOT', 'SVC', 'OIL',
                     'DEM', 'rain', 'TEM']
+n_channel = len(variables_export)
 
 # require gradients to be positive: AGO, INDCT, SVC, SVO, TRANS, COAL (RDC+AGC)
 major_variables = [0,1,2,3,4]
@@ -73,37 +96,18 @@ indct = 2
 coal = 0
 
 # Inputs
-with open('../data/project2_energy_1812/process/full_data_process_dic'+char_name+'.pickle', 'rb') as data_standard:
-    data_full_package = pickle.load(data_standard)
-cnn_data_name = 'energy_const_air_nonstand'
-lb = 30 - radius
-ub = 30 + radius + 1
-input_cnn_training = data_full_package[cnn_data_name]['input_training'][:, lb:ub, lb:ub, :]
-input_cnn_validation = data_full_package[cnn_data_name]['input_validation'][:, lb:ub, lb:ub, :]
-input_cnn_testing = data_full_package[cnn_data_name]['input_testing'][:, lb:ub, lb:ub, :]
-output_cnn_training = data_full_package[cnn_data_name]['output_training'][:, 0][:, np.newaxis]
-output_cnn_validation = data_full_package[cnn_data_name]['output_validation'][:, 0][:, np.newaxis]
-output_cnn_testing = data_full_package[cnn_data_name]['output_testing'][:, 0][:, np.newaxis]
-output_cnn_all_vars_training = data_full_package[cnn_data_name]['output_training']
-output_cnn_all_vars_validation = data_full_package[cnn_data_name]['output_validation']
-output_cnn_all_vars_testing = data_full_package[cnn_data_name]['output_testing']
-index_cnn_training = data_full_package[cnn_data_name]['index_training']
-index_cnn_validation = data_full_package[cnn_data_name]['index_validation']
-index_cnn_testing = data_full_package[cnn_data_name]['index_testing']
-weights_cnn_training = data_full_package[cnn_data_name]['weight_training'].T/100
-weights_cnn_validation = data_full_package[cnn_data_name]['weight_validation'].T/100
-weights_cnn_testing = data_full_package[cnn_data_name]['weight_testing'].T/100
-sector_max = data_full_package['energy_magnitude_air_nonstand']
+(train_images,train_y,train_weights,
+    validation_images,validation_y,validation_weights,
+    test_images,test_y,test_weights,
+    train_mean_images,validation_mean_images,test_mean_images,
+    index_cnn_training,index_cnn_validation,index_cnn_testing,
+    sector_max) = util_data.read_data(char_name, standard, radius, output_var)
 
-train_images=input_cnn_training
-train_y=output_cnn_training
-train_weights = weights_cnn_training
-validation_images= input_cnn_validation
-validation_y =output_cnn_validation
-validation_weights = weights_cnn_validation
-test_images =input_cnn_testing
-test_y =output_cnn_testing
-test_weights = weights_cnn_testing
+control_var_training, control_var_validation, control_var_testing, control_scale = \
+    util_data.get_control_variables(filename='agriculture_variables_station.xlsx',
+                                train_index=index_cnn_training,
+                                validation_index=index_cnn_validation,
+                                test_index=index_cnn_testing)
 
 all_trials_scenario_output = {}
 all_trials_tr_gradients = {}
@@ -115,7 +119,8 @@ all_trials_te_gradients_mean = {}
 
 model_validity = []
 
-for index, val in zip(cnn_results['index'].astype(int), cnn_results['validation_mse']):
+for hp_idx, model_idx, linear_coef, val, test in zip(cnn_results['hp_index'].astype(int), cnn_results['model_index'].astype(int),
+    cnn_results['linear_coef'], cnn_results['val_mse_'+output_var_name], cnn_results['test_mse_'+output_var_name]):
 
     # if prediction error too large, then terminate analysis
     if val > best_val * 1.5:
@@ -125,44 +130,69 @@ for index, val in zip(cnn_results['index'].astype(int), cnn_results['validation_
     tf.reset_default_graph()
 
     sess = tf.Session(config=config)
-    saver = tf.train.import_meta_graph(run_dir + "/model_" + str(index) + ".ckpt.meta")
-    saver.restore(sess, run_dir + '/model_' + str(index) + ".ckpt")
+    if linear_coef == 0:
+        linear_coef = int(linear_coef)
+    files = glob.glob(run_dir + "/model_"+str(linear_coef) +"_"+str(hp_idx) + "_" +str(model_idx)+run_suffix+"_*.ckpt.meta")
+    if len(files) == 0:
+        print("Model not found. Exiting...")
+        print(run_dir + "/model_"+str(linear_coef) +"_"+str(hp_idx) + "_" +str(model_idx)+run_suffix+"_*.ckpt.meta")
+        sys.exit()
+    elif len(files) > 1:
+        print('More than one model found. Exiting...')
+        sys.exit()
+    else:
+        file = files[0]
+
+    saver = tf.train.import_meta_graph(file)
+    saver.restore(sess, '.'.join(file.split('.')[:-1]))
     graph = tf.get_default_graph()
 
     X = graph.get_tensor_by_name("inputs/X:0")
     y = graph.get_tensor_by_name("inputs/y:0")
-    output = graph.get_tensor_by_name("outputs/output:0")
+    X_mean = graph.get_tensor_by_name("inputs/X_mean:0")
     weights = graph.get_tensor_by_name("inputs/weights:0")
+
+    output = graph.get_tensor_by_name("outputs/final_output:0")
     bias = graph.get_tensor_by_name("outputs/bias:0")
 
-    # gradients w.r.t. images
-    gradients = tf.gradients(output, X)
+    # GRADIENTS
+    # gradients w.r.t. mean values
+    # gradients_mean = tf.gradients(output, X_mean)
+    #
+    # tr_gradients_mean = sess.run(gradients_mean, feed_dict={X: train_images, X_mean: np.hstack([train_mean_images, control_var_training])})
+    # val_gradients_mean = sess.run(gradients_mean, feed_dict={X: validation_images, X_mean: np.hstack([validation_mean_images, control_var_validation])})
+    # te_gradients_mean = sess.run(gradients_mean, feed_dict={X: test_images, X_mean: np.hstack([test_mean_images, control_var_testing])})
+    # for (i,k) in control_scale:
+    #     tr_gradients_mean[i+n_channel] = tr_gradients_mean[i+n_channel] / np.power(10, k)
+    #     val_gradients_mean[i+n_channel] = val_gradients_mean[i+n_channel] / np.power(10, k)
+    #     te_gradients_mean[i+n_channel] = te_gradients_mean[i+n_channel] / np.power(10, k)
 
     # gradients w.r.t. raw image values (chain rule）
-    tr_gradients = sess.run(gradients, feed_dict={X: train_images})
+    gradients = tf.gradients(output, X)
     # [0] since only one variable is in sess.run
     # 10000* unit is dPM / d 10k tons of emissions
     # (radius*2+1) x (radius*2+1) x #sectors x #observations
+    tr_gradients = sess.run(gradients, feed_dict={X: train_images, X_mean: np.hstack([train_mean_images, control_var_training])})
     tr_gradients = 10000*np.array([[[np.divide(tr_gradients[0][:, i, j, l], sector_max[k]) \
                                      for k,l in zip(variables_export, range(len(variables_export)))] \
                                     for i in range(radius*2+1)] for j in range(radius*2+1)])
 
-    val_gradients = sess.run(gradients, feed_dict={X: validation_images})
+    val_gradients = sess.run(gradients, feed_dict={X: validation_images, X_mean: np.hstack([validation_mean_images, control_var_validation])})
     val_gradients = 10000*np.array([[[np.divide(val_gradients[0][:, i, j, l], sector_max[k]) \
                                       for k,l in zip(variables_export, range(len(variables_export)))] \
                                      for i in range(radius*2+1)] for j in range(radius*2+1)])
 
-    te_gradients = sess.run(gradients, feed_dict={X: test_images})
+    te_gradients = sess.run(gradients, feed_dict={X: test_images, X_mean: np.hstack([test_mean_images, control_var_testing])})
     te_gradients = 10000*np.array([[[np.divide(te_gradients[0][:, i, j, l], sector_max[k]) \
                                      for k,l in zip(variables_export, range(len(variables_export)))] \
                                     for i in range(radius*2+1)] for j in range(radius*2+1)])
 
-    gradients_mean = np.sum(np.concatenate((tr_gradients, val_gradients, te_gradients), axis=3), axis=(0,1))
+    gradients_im_mean = np.sum(np.concatenate((tr_gradients, val_gradients, te_gradients), axis=3), axis=(0,1))
 
     # Filter models based on validity of gradients
-    gradients_mean_mean = np.mean(gradients_mean, axis=1)
-    gradients_mean_major = gradients_mean_mean[[major_variables]]
-    notvalid = (gradients_mean_mean[coal] < gradients_mean_mean[indct])
+    gradients_im_mean_mean = np.mean(gradients_im_mean, axis=1)
+    gradients_mean_major = gradients_im_mean_mean[[major_variables]]
+    notvalid = (gradients_im_mean_mean[coal] < gradients_im_mean_mean[indct])
 
     '''
     # gas variables taken out of the model 191219
@@ -171,12 +201,14 @@ for index, val in zip(cnn_results['index'].astype(int), cnn_results['validation_
         notvalid += np.sum(te_gradients_mean_mean[gas_var] > te_gradients_mean_mean[[oil_coal_variables]])
     '''
     bias = sess.run(bias)[0]
-    model_validity.append([index, val, int(np.sum(gradients_mean_major < 0) != 0), int(notvalid), bias] \
-                          + gradients_mean_mean.tolist())
+    model_validity.append([hp_idx, linear_coef, model_idx, val, test, int(np.sum(gradients_mean_major < 0) != 0), int(notvalid), bias] \
+                          + gradients_im_mean_mean.tolist())
     sess.close()
-    print(index, val)
+    print(hp_idx, linear_coef, model_idx, val)
 
 
-model_validity = pd.DataFrame(model_validity, columns=['index', 'validation', 'neg_gradients', 'coals', 'bias'] + \
-                [v+"cell_mean" for v in variables_export]).to_csv("../output/"+output_folder+\
-                 "/results/model_validity_"+str(output_var)+"_"+str(radius)+".csv", index=False, float_format='%.3f')
+model_validity = pd.DataFrame(model_validity, columns=['hp_index','linear_coef','model_index', 'validation', 'test',
+                                                       'neg_gradients', 'coals', 'bias'] + \
+                [v+"_cell_mean" for v in variables_export]).to_csv(output_dir+output_folder+\
+                 "/results/model_validity_"+"".join([str(ov) for ov in output_var])+"_"+str(radius)+run_suffix+".csv",
+                index=False, float_format='%.3f')

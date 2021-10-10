@@ -8,8 +8,16 @@ import pickle as pkl
 import time
 import sys
 
-output_folder = '200905'
-top_models = [72,87,40,122,7]
+from setup import *
+import util_data
+
+output_folder = '210930'
+top_models = [14]
+hp_idx = 153
+linear_coef = 0.1
+run_suffix = '_linearfix'
+
+
 variables_export = ['COAL', 'INDCT',
                     'INDOT', 'SVC', 'OIL',
                     'DEM', 'rain', 'TEM']
@@ -18,27 +26,26 @@ major_variables = [0,1,2,3,4]
 char_name = '_no_airport_no_gas_coal_combined_oil_combined'
 standard = 'const'
 
-with open('../data/project2_energy_1812/process/full_data_process_dic'+ char_name + '.pickle', 'rb') as data_standard:
-    data_full_package = pkl.load(data_standard)
+(train_images,train_y,train_weights,
+    validation_images,validation_y,validation_weights,
+    test_images,test_y,test_weights,
+    train_mean_images,validation_mean_images,test_mean_images,
+    index_cnn_training,index_cnn_validation,index_cnn_testing,
+    sector_max) = util_data.read_data(char_name, standard, radius=30, output_var=[0])
 
-cnn_data_name = 'energy_'+standard+'_air_nonstand'
-output_cnn_training = data_full_package[cnn_data_name]['output_training'][:, 0]
-output_cnn_validation = data_full_package[cnn_data_name]['output_validation'][:, 0]
-output_cnn_testing = data_full_package[cnn_data_name]['output_testing'][:, 0]
-weights_cnn_training = data_full_package[cnn_data_name]['weight_training'].T
-weights_cnn_validation = data_full_package[cnn_data_name]['weight_validation'].T
-weights_cnn_testing = data_full_package[cnn_data_name]['weight_testing'].T
-index_cnn_training = data_full_package[cnn_data_name]['index_training']
-index_cnn_validation = data_full_package[cnn_data_name]['index_validation']
-index_cnn_testing = data_full_package[cnn_data_name]['index_testing']
+control_var_training, control_var_validation, control_var_testing, control_scale = \
+    util_data.get_control_variables(filename='agriculture_variables_station.xlsx',
+                                train_index=index_cnn_training,
+                                validation_index=index_cnn_validation,
+                                test_index=index_cnn_testing)
 
-#pm0 = np.concatenate((output_cnn_training, output_cnn_validation, output_cnn_testing))
-population = np.concatenate((weights_cnn_training, weights_cnn_validation, weights_cnn_testing))[:, 0]
+population = np.concatenate((train_weights, validation_weights, test_weights))[:, 0]*100
 indices = np.concatenate((index_cnn_training, index_cnn_validation, index_cnn_testing))
 
-for index in top_models:
+for model_idx in top_models:
 
-    with open("../output/"+output_folder+"/"+str(index)+"_results.pkl", "rb") as f:
+    with open(output_dir+output_folder+"/"+str(hp_idx)+"_"+str(linear_coef)+"_"+str(model_idx)+"_results"+run_suffix+".pkl", "rb") as f:
+    # with open("/home/jtl/Dropbox (MIT)/CNN_for_city_pollution/output/200905/72_results.pkl", "rb") as f:
         scenario_output = np.array(pkl.load(f))[:, :, :, 0]
         pkl.load(f)  #gradients
         pkl.load(f) #gradients_masked
@@ -46,6 +53,7 @@ for index in top_models:
         mask_full_df = pkl.load(f)
         id10_full = pkl.load(f)
         indices = pkl.load(f)
+
 
     mask_full_df['id10_all_true'] = True
 
@@ -71,9 +79,10 @@ for index in top_models:
 
         mean_df_full[v] = -np.array(mean) * 1.8 * np.power(10, 10)
 
-    mean_df_full.to_csv("../output/"+output_folder+"/"+str(index)+"_md_mean_full.csv", index=False)
+    mean_df_full.to_csv(output_dir+output_folder+"/"+str(hp_idx)+"_"+str(linear_coef)+"_"+str(model_idx)+"_md_mean_full"+run_suffix+".csv", index=False)
     mean_df = mean_df_full.groupby('id10').sum()
-    mean_df.to_csv("../output/"+output_folder+"/"+str(index)+"_md_mean.csv")
+    mean_df.to_csv(output_dir+output_folder+"/"+str(hp_idx)+"_"+str(linear_coef)+"_"+str(model_idx)+"_md_mean"+run_suffix+".csv")
+
 
     # scenario
     mean = []
@@ -102,9 +111,9 @@ for index in top_models:
     scenario_pd_p95 = np.reshape(p95, output_shape)
 
     book = openpyxl.Workbook()
-    book.save("../output/" + output_folder + '/'+str(index)+'_scenario_ad_xlsx.xlsx')
-    book = load_workbook("../output/" + output_folder + '/'+str(index)+'_scenario_ad_xlsx.xlsx')
-    writer = pd.ExcelWriter("../output/" + output_folder + '/'+str(index)+'_scenario_ad_xlsx.xlsx', engine='openpyxl')
+    book.save(output_dir + output_folder + '/'+str(hp_idx)+"_"+str(linear_coef)+"_"+str(model_idx)+"_scenario_ad_xlsx"+run_suffix+".xlsx")
+    book = load_workbook(output_dir + output_folder + '/'+str(hp_idx)+"_"+str(linear_coef)+"_"+str(model_idx)+"_scenario_ad_xlsx"+run_suffix+".xlsx")
+    writer = pd.ExcelWriter(output_dir + output_folder + '/'+str(hp_idx)+"_"+str(linear_coef)+"_"+str(model_idx)+"_scenario_ad_xlsx"+run_suffix+".xlsx", engine='openpyxl')
     writer.book = book
     writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
     scenario_name = ['res_col', 'ind_col', 'trn_oil']
@@ -123,13 +132,12 @@ for index in top_models:
         df1.to_excel(writer, sheet_name=scenario_name[s]+'_mean', index=False, header=False)
         df2.to_excel(writer, sheet_name=scenario_name[s]+'_p5', index=False, header=False)
         df3.to_excel(writer, sheet_name=scenario_name[s]+'_p95', index=False, header=False)
+
     book.remove(book['Sheet'])
     writer.save()
 
-    result = pd.DataFrame(result, columns=['variable','scenario','index','p0','p1','pop','mean','p5','p95']).to_csv("../output/" \
-                        + output_folder + '/'+str(index)+'_scenario_ad_csv.csv', index=False, float_format='%.3f')
-
-
+    result = pd.DataFrame(result, columns=['variable','scenario','model_idx','p0','p1','pop','mean','p5','p95']).to_csv(output_dir \
+                        + output_folder + '/'+str(hp_idx)+"_"+str(linear_coef)+"_"+str(model_idx)+'_scenario_ad_csv'+run_suffix+'.csv', index=False, float_format='%.3f')
 
 '''
 # vector implementation (old version)
@@ -167,15 +175,15 @@ for v in variables_export:
 mean = np.array(mean).reshape((len(variables_export), -1)).T
 mean = pd.DataFrame(np.append(id10_full[mask], mean, axis=1), index=id10_full[mask], columns = ['id10'] + variables_export)
 mean = mean.groupby('id10', as_index=False).sum()
-mean.to_csv("../output/"+output_folder+"/pd_mean_"+str(index)+".csv", index=False)
+mean.to_csv(output_dir+output_folder+"/pd_mean_"+str(hp_idx)+"_"+str(linear_coef)+"_"+str(model_idx)+".csv", index=False)
 
 p5 = np.array(p5).reshape((len(variables_export), -1)).T
 p5 = pd.DataFrame(np.append(id10_full[mask], p5, axis=1), index=id10_full[mask], columns = ['id10'] + variables_export)
 p5 = p5.groupby('id10', as_index=False).sum()
-p5.to_csv("../output/"+output_folder+"/pd_p5_"+str(index)+".csv", index=False)
+p5.to_csv(output_dir+output_folder+"/pd_p5_"+str(hp_idx)+"_"+str(linear_coef)+"_"+str(model_idx)+".csv`", index=False)
 
 p95 = np.array(p95).reshape((len(variables_export), -1)).T
 p95 = pd.DataFrame(np.append(id10_full[mask], p95, axis=1), index=id10_full[mask], columns = ['id10'] + variables_export)
 p95 = p95.groupby('id10', as_index=False).sum()
-p95.to_csv("../output/"+output_folder+"/pd_p95_"+str(index)+".csv", index=False)
+p95.to_csv(output_dir+output_folder+"/pd_p95_"+str(hp_idx)+"_"+str(linear_coef)+"_"+str(model_idx)+".csv", index=False)
 '''

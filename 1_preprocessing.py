@@ -218,12 +218,14 @@ data_mean_training_validation_testing = prepare_tensor_data(data_mean_dic, air_p
 data_std_training_validation_testing = prepare_tensor_data(data_std_dic, air_p_subset, pop_weights, variables_export, stratify=stratify)
 data_min_training_validation_testing = prepare_tensor_data(min_dic, air_p_subset, pop_weights, variables_export, stratify=stratify)
 data_max_training_validation_testing = prepare_tensor_data(max_dic, air_p_subset, pop_weights, variables_export, stratify=stratify)
+data_raw_training_validation_testing = prepare_tensor_data(data, air_p_subset, pop_weights, variables_export)
 
 # change 20200315: two normalizations are included. in previous versions only energy_air_nonstand exists (standard normalization)
 # update 20210908: took out all _nonstand at the end
 # update 20210908: save different normalizations to separate versions
 
 norm_data_process = {}
+norm_data_process['energy_raw'] = data_raw_training_validation_testing
 norm_data_process['energy_norm_air'] = data_norm_training_validation_testing
 norm_data_process['energy_mean_air'] = data_mean_training_validation_testing
 norm_data_process['energy_std_air'] = data_std_training_validation_testing
@@ -233,6 +235,7 @@ with open(data_dir+"process/data_process_dic"+char_name+"_norm.pickle", 'wb') as
     pickle.dump(norm_data_process, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 minmax_data_process = {}
+minmax_data_process['energy_raw'] = data_raw_training_validation_testing
 minmax_data_process['energy_minmax_air'] = data_minmax_training_validation_testing
 minmax_data_process['energy_mean_air'] = data_mean_training_validation_testing
 minmax_data_process['energy_min_air'] = data_min_training_validation_testing
@@ -253,8 +256,6 @@ with open(data_dir+"process/data_process_dic"+char_name+"_const.pickle", 'wb') a
 
 # I don't think these are used at all at later stages
 # full_data_process['energy_full_raw_data'] = energy_data_tensor
-# data_raw_training_validation_testing = prepare_tensor_data(data, air_p_subset, pop_weights, variables_export)
-# full_data_process['energy_raw'] = data_raw_training_validation_testing
 # full_data_process['energy_full_mean_by_station_var'] = mean_tensor
 # full_data_process['energy_full_std_by_station_var'] = sd_tensor
 # full_data_process['energy_full_weights'] = pop_weights.values[np.newaxis, :]

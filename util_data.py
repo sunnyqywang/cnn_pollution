@@ -7,8 +7,56 @@ utilities for data preprocessing
 
 import numpy as np
 import pandas as pd
+import pickle
 from sklearn.model_selection import StratifiedKFold
 from setup import *
+
+def read_data(char_name, standard, radius, output_var):
+    with open(data_dir + "process/data_process_dic" + char_name + "_" + standard + ".pickle", 'rb') as data_standard:
+        data_full_package = pickle.load(data_standard)
+    cnn_data_name = 'energy_' + standard + '_air'
+    lb = 30 - radius
+    ub = 30 + radius + 1
+    input_cnn_training = data_full_package[cnn_data_name]['input_training'][:, lb:ub, lb:ub, :]
+    input_cnn_validation = data_full_package[cnn_data_name]['input_validation'][:, lb:ub, lb:ub, :]
+    input_cnn_testing = data_full_package[cnn_data_name]['input_testing'][:, lb:ub, lb:ub, :]
+    output_cnn_training = data_full_package[cnn_data_name]['output_training'][:, output_var]
+    output_cnn_validation = data_full_package[cnn_data_name]['output_validation'][:, output_var]
+    output_cnn_testing = data_full_package[cnn_data_name]['output_testing'][:, output_var]
+    # output_cnn_all_vars_training = data_full_package[cnn_data_name]['output_training']
+    # output_cnn_all_vars_validation = data_full_package[cnn_data_name]['output_validation']
+    # output_cnn_all_vars_testing = data_full_package[cnn_data_name]['output_testing']
+    index_cnn_training = data_full_package[cnn_data_name]['index_training']
+    index_cnn_validation = data_full_package[cnn_data_name]['index_validation']
+    index_cnn_testing = data_full_package[cnn_data_name]['index_testing']
+    weights_cnn_training = data_full_package[cnn_data_name]['weight_training'].T / 100
+    weights_cnn_validation = data_full_package[cnn_data_name]['weight_validation'].T / 100
+    weights_cnn_testing = data_full_package[cnn_data_name]['weight_testing'].T / 100
+    sector_max = data_full_package['energy_magnitude_air']
+    mean_data_name = 'energy_mean_air'
+    input_mean_training = data_full_package[mean_data_name]['input_training']
+    input_mean_validation = data_full_package[mean_data_name]['input_validation']
+    input_mean_testing = data_full_package[mean_data_name]['input_testing']
+
+    train_images = input_cnn_training
+    train_y = output_cnn_training
+    train_weights = weights_cnn_training
+    validation_images = input_cnn_validation
+    validation_y = output_cnn_validation
+    validation_weights = weights_cnn_validation
+    test_images = input_cnn_testing
+    test_y = output_cnn_testing
+    test_weights = weights_cnn_testing
+    train_mean_images = input_mean_training / 10000
+    validation_mean_images = input_mean_validation / 10000
+    test_mean_images = input_mean_testing / 10000
+
+    return (train_images,train_y,train_weights,
+            validation_images,validation_y,validation_weights,
+            test_images,test_y,test_weights,
+            train_mean_images,validation_mean_images,test_mean_images,
+            index_cnn_training,index_cnn_validation,index_cnn_testing,
+            sector_max)
 
 def get_control_variables(filename, train_index, validation_index, test_index):
     control_var = pd.read_excel(data_dir + 'raw/' + filename)

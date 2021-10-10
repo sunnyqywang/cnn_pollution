@@ -15,23 +15,31 @@ import util_cnn
 import util_performance
 import sys
 
-output_folder = '200905'
+from setup import *
+import util_data
+
+output_folder = '210921'
 standard = 'const'
-output_var = 0
+output_var = [0]
 # need further modification if radius other than 30 is used
 radius = 30
 # number of models to ensemble for cnn
 num_models = 5
 
+variables_export = ['COAL', 'INDCT',
+                    'INDOT', 'SVC', 'OIL',
+                    'DEM', 'rain', 'TEM']
+control_vars = ["fertilizer_area", "N_fertilizer_area", "livestock_area", "poultry_area", "pcGDP"]
+
 ### 0 read data
-cnn_data_name = 'energy_'+standard+'_air_nonstand'
+cnn_data_name = 'energy_'+standard+'_air'
 char_name = '_no_airport_no_gas_coal_combined_oil_combined'
-with open('../data/project2_energy_1812/process/full_data_process_dic'+char_name+'.pickle', 'rb') as data_standard:
+with open(data_dir+"process/data_process_dic"+char_name+"_"+standard+".pickle", 'rb') as data_standard:
     data_full_package = pickle.load(data_standard)
 
 ## use all input variables
 # use standardized energy data and non-standardized air pollution data
-mean_data_name = 'energy_mean_air_nonstand'
+mean_data_name = 'energy_mean_air'
 input_mean_training = data_full_package[mean_data_name]['input_training']
 input_mean_validation = data_full_package[mean_data_name]['input_validation']
 input_mean_testing = data_full_package[mean_data_name]['input_testing']
@@ -51,15 +59,23 @@ ntraining = len(input_mean_training)
 nvalidation = len(input_mean_validation)
 ntesting = len(input_mean_testing)
 
+control_var_training, control_var_validation, control_var_testing, control_scale = \
+    util_data.get_control_variables(filename='agriculture_variables_station.xlsx',
+                                train_index=data_full_package[cnn_data_name]['index_training'],
+                                validation_index=data_full_package[cnn_data_name]['index_validation'],
+                                test_index=data_full_package[cnn_data_name]['index_testing'])
+
+
 ##########################################################################################
 ### station linear regression
 #
-linear_model = sm.WLS(output_training, input_mean_training, weights = weights_training).fit()
-# 
-#energy_vars = data_full_package['energy_vars']
-#params_df = pd.DataFrame(linear_model.params, columns = ['params'], index=['const']+energy_vars)
-#print("Coefficients should be mainly positive, however, it looks like: ")
-#print(params_df)
+# linear_model = sm.WLS(output_training, np.hstack((input_mean_training,control_var_training)), weights = weights_training).fit()
+linear_model_2 = sm.WLS(output_training, input_mean_training, weights = weights_training).fit()
+
+# params_df = pd.DataFrame(linear_model.params, columns = ['params'], index=['const']+variables_export+control_vars)
+params_df_2 = pd.DataFrame(linear_model_2.params, columns = ['params'], index=['const']+variables_export)
+print("Coefficients should be mainly positive, however, it looks like: ")
+print(params_df)
 
 # pred
 output_linear_mean_train = linear_model.predict(input_mean_training)
@@ -151,3 +167,5 @@ for performance_measure in performance_measure_list:
 performance_table = pd.DataFrame(np.array([results_cnn, results_linear_mean, results_linear_cell]).T,
                                      index=index_names, columns=col_names).to_csv('../output/'+output_folder+\
                                      '/complete_performance_table_'+str(output_var)+'_'+str(radius)+'.csv', float_format='%.3f')
+
+# Remove saved models
