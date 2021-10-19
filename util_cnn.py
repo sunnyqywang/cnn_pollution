@@ -10,6 +10,8 @@ import pandas as pd
 import pickle as pkl
 import tensorflow as tf
 
+from setup import *
+
 def obtain_mini_batch(X, Y, weights, n_mini_batch):
     '''
     Return mini_batch
@@ -111,20 +113,25 @@ def add_fc_layer(input_layer, n_fc, init_mtx=None):
         input_layer = tf.layers.dense(input_layer, n_fc, activation=tf.nn.relu, kernel_initializer=init_mtx)
     return input_layer
 
-def get_ensembled_prediction(output_folder, output_var, radius, num_models, train_size):
-    cnn_performance = pd.read_csv("../output/" + output_folder + "/results/model_validity_" + str(output_var) + "_" +\
-                                  str(radius) + ".csv")
-    cnn_performance = cnn_performance[((cnn_performance['neg_gradients']==0) & (cnn_performance['coals']==0))]
-    cnn_top_models = cnn_performance.iloc[0:num_models]['index']
+def get_ensembled_prediction(output_folder, output_var, radius, cnn_top_models, train_size, run_suffix=''):
+
 
     output_cnn_train = None
     output_cnn_validation = None
     output_cnn_test = None
 
-    for idx in cnn_top_models:
-        with open('../output/' + output_folder + '/results/results_' + str(output_var) + '_' + str(radius) + '/model_output_hyper_searching_dic_' \
-                  + str(int(idx)) + '.pickle', 'rb') as f:
-            output_cnn = pkl.load(f)
+    for (hp_idx, linear_coef, model_idx) in cnn_top_models:
+        if model_idx == -1:
+            with open(output_dir + output_folder + '/results/results_' + ''.join([str(v) for v in output_var]) + '_' + \
+                      str(radius) + '/model_output_hyper_searching_dic_' + str(linear_coef) + '_' + str(int(hp_idx)) + \
+                      run_suffix + '.pickle', 'rb') as f:
+                output_cnn = pkl.load(f)
+        else:
+            with open(output_dir + output_folder + '/results/results_' + ''.join([str(v) for v in output_var]) + '_' + \
+                      str(radius) + '/model_output_hyper_searching_dic_' + str(linear_coef) + '_' + str(int(hp_idx)) + \
+                      '_' + str(int(model_idx)) + run_suffix + '.pickle', 'rb') as f:
+                output_cnn = pkl.load(f)
+
         augment = output_cnn[1][-4]
 
         if output_cnn_train is None:
@@ -142,8 +149,6 @@ def get_ensembled_prediction(output_folder, output_var, radius, num_models, trai
             output_cnn_validation += output_cnn[0]['output_validation']
             output_cnn_test += output_cnn[0]['output_test']
 
-    if len(cnn_top_models) < num_models:
-        print('Not enough valid models. Only ' + str(len(cnn_top_models)) + ' models included.')
     output_cnn_train /= len(cnn_top_models)
     output_cnn_validation /= len(cnn_top_models)
     output_cnn_test /= len(cnn_top_models)

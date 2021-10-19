@@ -28,11 +28,11 @@ tf.debugging.set_log_device_placement(True)
 
 output_var = [0]
 radius = 30
-output_folder = "210930"
-top_models = [14]
+output_folder = "211010"
+top_models = [9]
 
-hp_idx = 153
-linear_coef = 0.1
+hp_idx = 145
+linear_coef = 0.3
 run_suffix = '_linearfix'
 
 run_dir = output_dir+output_folder+"/models/models_" + "".join([str(ov) for ov in output_var]) + "_" + str(radius)

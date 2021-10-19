@@ -11,10 +11,10 @@ import sys
 from setup import *
 import util_data
 
-output_folder = '210930'
-top_models = [14]
-hp_idx = 153
-linear_coef = 0.1
+output_folder = '211010'
+top_models = [9]
+hp_idx = 145
+linear_coef = 0.3
 run_suffix = '_linearfix'
 
 

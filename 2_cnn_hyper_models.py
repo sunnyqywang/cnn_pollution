@@ -25,21 +25,21 @@ config.gpu_options.allow_growth=True
 
 char_name = '_no_airport_no_gas_coal_combined_oil_combined'
 # variables_export = ['COAL', 'INDCT', 'INDOT', 'SVC', 'OIL', 'DEM', 'rain', 'TEM']
-output_folder = '210930'
+output_folder = '211010'
 standard = 'const'
 #output_vars = ['pm25', 'pm10', 'so2', 'no2', 'co', 'o3', 'aqi']
-output_vars = [[0]]#[[0,1,2,3,4,5]]
+output_vars = [[0,1,2,3,4,5]]
 image_radius = 30 # max 30
-linear_coefs = [0,0.01,0.1,0.2,0.25,0.5,0.75,0.9,0.95]
+linear_coefs = [0.2]#[0,0.1,0.2,0.3,0.5,0.7,0.9,0.95]
 # linear_coefs = [0]
 # if import_hyperparameters is not None, then import the hyperparameter # in the saved models (with the same radius and output variable(s))
-import_hyperparameters = 153
+import_hyperparameters = None
 run_suffix = "_linearfix"
 
 # if import_hyperparamters is None, then do a search of hyperparameters
 # -1 means all; >0 means randomly sampled combos
 # if import_hyperparameter is not None, this parameter represents the number of times that this set of hyperparameters will be repeated.
-n_hyperparam_searching = 30
+n_hyperparam_searching = -1
 start_parameter = 0
 
 ### 0. read data
@@ -129,9 +129,24 @@ def train_cnn(idx, train_images, train_y, train_weights, validation_images, vali
         # init = tf.constant_initializer([0.00258922454, -1.25796299e-05, -0.000169064926, -0.00040304034, 0.00070013143,\
         #     -0.000477985298, -0.000117271471, -0.0982265421, 23.9178895, -18.9303794, 9.42604944, 0.45162213, 5.10710306])
         # linear_part = add_fc_layer(X_mean, n_air_variables, init_mtx=init)
-        linear_fix = tf.constant([0.00258922454, -1.25796299e-05, -0.000169064926, -0.00040304034, 0.00070013143,\
-            -0.000477985298, -0.000117271471, -0.0982265421, 23.9178895, -18.9303794, 9.42604944, 0.45162213, 5.10710306],
-            shape=(n_channel+n_control_var,1))
+
+        linear_fix_dic = {0:[2.52973782e-03, -1.35041764e-05, -1.28294696e-04, -3.86105665e-04, 7.18041745e-04,
+                -1.11069719e-03, -2.44344984e-04, -9.15259169e-02, 1.50037549e+01, 8.78439986e+00, 4.69878389e-01],
+                          1:[4.00649877e+01,  2.70000045e-01, -1.13559922e+00,
+                             -1.39532146e+01,  5.74306777e+00,  4.64453235e+01, -1.39366689e+01,
+                             -1.07186417e+03,  3.04264490e+01,  4.43978906e+00,  9.00812453e-01],
+                          2:[8.19002462e+00,  7.09963810e-01,  3.37301044e+00,
+                              8.71421165e+00, -6.26245408e+00,  2.53395976e+01,  7.29376113e+00,
+                             -7.90922979e+02, -2.11138615e+00,  4.20828551e+00,  3.46035635e-01],
+                          3:[8.2578667, -0.04405988,   1.36660061,  -1.9467246,
+                               3.92231257,   4.65380866,  -6.18859082, -15.98711687,  -0.30667645,
+                              -0.52432386,   0.03683353],
+                          4:[0.53037012,  0.01096355,  0.07183032, -0.42391902, -0.14307672,
+                              0.66418298,  0.1271171,  -1.39470095, -0.10631515, -0.02114975, -0.01165508],
+                          5:[-1.21018167e+01,  1.51479958e-01,  4.67799162e+00,
+                              1.13204531e+01, -9.64383562e-02,  2.78793501e+01, -1.30869541e+01,
+                              8.42973625e+02,  1.94361059e+01,  1.32027164e+01, -4.70762088e-01]}
+        linear_fix = tf.constant(np.array([linear_fix_dic[v] for v in output_var]).T, dtype=tf.float32)#, shape=(n_channel+n_control_var,len(output_var)))
         linear_part = tf.linalg.matmul(X_mean, linear_fix)
         linear_part = tf.identity(linear_part, name='linear_part')
         cnn_part = tf.layers.dense(input_layer, n_air_variables)
@@ -193,10 +208,10 @@ def train_cnn(idx, train_images, train_y, train_weights, validation_images, vali
 
                 if iteration > 100:
                     if (np.abs(loss_ - ref1) / ref1 < 0.005) & (np.abs(loss_ - ref2) / ref2 < 0.005):
-                        print("Early stopping at iteration", iteration)
+                        print("\nEarly stopping at iteration", iteration)
                         break
                     if (ref1 < loss_) & (ref1 < ref2):
-                        print("Diverging. stop.")
+                        print("\nDiverging. stop.")
                         break
                     if loss_ < best:
                         best = loss_
@@ -212,9 +227,9 @@ def train_cnn(idx, train_images, train_y, train_weights, validation_images, vali
                 if best_epoch == iteration:
                     if import_hyperparameters is not None:
                         saver.save(sess, output_dir+output_folder+"/models/models_"+"".join([str(ov) for ov in output_var])+"_"+str(image_radius)+
-                                   "/model_"+str(linear_coef) +"_"+str(import_hyperparameters) + "_" +str(idx)+"_withinit_"+str(iteration)+".ckpt")
+                                   "/model_"+str(linear_coef) +"_"+str(import_hyperparameters) + "_" +str(idx)+run_suffix+"_"+str(iteration)+".ckpt")
                         files = glob.glob(output_dir+output_folder+"/models/models_"+"".join([str(ov) for ov in output_var])+"_"+str(image_radius)+
-                                          "/model_"+str(linear_coef)+"_"+str(import_hyperparameters)+"_"+str(idx)+"_withinit_*.ckpt*")
+                                          "/model_"+str(linear_coef)+"_"+str(import_hyperparameters)+"_"+str(idx)+run_suffix+"_*.ckpt*")
                     else:
                         saver.save(sess, output_dir + output_folder + "/models/models_" + "".join(
                             [str(ov) for ov in output_var]) + "_" + str(image_radius) +
@@ -254,7 +269,10 @@ control_var_training, control_var_validation, control_var_testing, control_scale
                                 validation_index=data_full_package[cnn_data_name]['index_validation'],
                                 test_index=data_full_package[cnn_data_name]['index_testing'])
 
+### 1. Search hyperparameters for CNN
 for output_var, linear_coef in itertools.product(output_vars, linear_coefs):
+    model_output_hyper_searching = {}
+
     lb = 30-image_radius
     ub = 30+image_radius+1
     # use standardized energy data and non-standardized air pollution data
@@ -303,9 +321,6 @@ for output_var, linear_coef in itertools.product(output_vars, linear_coefs):
         validation_max_images = input_max_validation  / 10000
         test_max_images = input_max_testing / 10000
 
-    ### 1. Search hyperparameters for CNN
-    model_output_hyper_searching = {}
-
     # read data
     train_images=input_cnn_training
     train_y=output_cnn_training
@@ -329,8 +344,9 @@ for output_var, linear_coef in itertools.product(output_vars, linear_coefs):
             hp = [hp[a] for a in idx]
     else:
         # import linear coef = 0
-        with open(output_dir+output_folder+'/results/results_'+"".join([str(ov) for ov in output_var])+'_'+str(image_radius)+
-                  '/model_output_hyper_searching_dic_0_' + str(import_hyperparameters)+'_hp.pickle', 'rb') as f:
+        # default import from predicting output variable #0 (pm2.5) and radius 30
+        with open(output_dir+output_folder+'/results/results_0_30/model_output_hyper_searching_dic_0_' +
+                  str(import_hyperparameters)+'_hp.pickle', 'rb') as f:
             hp = pkl.load(f)[1]
 
 
@@ -411,6 +427,6 @@ for output_var, linear_coef in itertools.product(output_vars, linear_coefs):
                 pickle.dump(model_output_hyper_searching[str(idx)], model_output_hyper_searching_dic, protocol=pickle.HIGHEST_PROTOCOL)
         else:
             with open(output_dir+output_folder+'/results/results_'+"".join([str(ov) for ov in output_var])+'_'+str(image_radius)+
-                      '/model_output_hyper_searching_dic_'+str(linear_coef)+"_"+str(import_hyperparameters)+"_"+str(idx)+'_withinit.pickle', 'wb') as model_output_hyper_searching_dic:
+                      '/model_output_hyper_searching_dic_'+str(linear_coef)+"_"+str(import_hyperparameters)+"_"+str(idx)+run_suffix+'.pickle', 'wb') as model_output_hyper_searching_dic:
                 pickle.dump(model_output_hyper_searching[str(idx)], model_output_hyper_searching_dic, protocol=pickle.HIGHEST_PROTOCOL)
 

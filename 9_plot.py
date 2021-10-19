@@ -17,17 +17,13 @@ from setup import *
 import util_data
 
 #os.environ["CUDA_VISIBLE_DEVICES"]="-1"
-output_folder = "210930"
+output_folder = "211010"
 top_models = [14]
-hp_idx = 153
+hp_idx = 145
 linear_coef = 0.1
 run_suffix = '_linearfix'
 
-config = tf.ConfigProto()
-config.gpu_options.allow_growth = True
-#tf.debugging.set_log_device_placement(True)
 plt.rcParams.update({'font.size': 20})
-
 
 # indices of variables to modify in scenario testing
 # industrial coal, transportation, residential coal

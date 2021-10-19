@@ -61,16 +61,18 @@ def read_data(char_name, standard, radius, output_var):
 def get_control_variables(filename, train_index, validation_index, test_index):
     control_var = pd.read_excel(data_dir + 'raw/' + filename)
     control_var = control_var[
-        ["station_code", "fertilizer_area", "N_fertilizer_area", "livestock_area", "poultry_area", "pcGDP"]]
+        ["station_code", "fertilizer_area", "livestock_area", "poultry_area"]]
+        # ["station_code", "fertilizer_area", "N_fertilizer_area", "livestock_area", "poultry_area", "pcGDP"]]
 
     # Control scale
     control_var["fertilizer_area"] /= 100
-    control_var["N_fertilizer_area"] /= 100
+    # control_var["N_fertilizer_area"] /= 100
     control_var["livestock_area"] /= 1000
     control_var["poultry_area"] /= 1000
-    control_var["pcGDP"] /= 100000
+    # control_var["pcGDP"] /= 100000
 
-    control_scale = [2,2,3,3,5]
+    # control_scale = [2,2,3,3,5]
+    control_scale = [2, 3, 3]
     control_var = control_var.set_index("station_code")
     control_var = control_var.fillna(0)
 

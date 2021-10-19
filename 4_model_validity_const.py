@@ -15,7 +15,7 @@ config.gpu_options.allow_growth=True
 tf.debugging.set_log_device_placement(True)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-output_folder = "210930"
+output_folder = "211010"
 output_var = [0]
 output_var_name = output_var_names_all[output_var[0]]
 if len(output_var) > 1:
@@ -25,7 +25,7 @@ if len(output_var) > 1:
 radius = 30
 standard = 'const'
 run_suffix = '_linearfix'
-import_hyperparameters = 153
+import_hyperparameters = 145
 
 run_dir = output_dir+output_folder+"/models/models_" + "".join([str(ov) for ov in output_var]) + "_" + str(radius)
 if import_hyperparameters is None:

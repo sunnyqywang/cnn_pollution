@@ -10,14 +10,14 @@ from setup import *
 from setup_cnn import *
 
 standard = 'const'
-output_folder = '210930'
+output_folder = '211010'
 char_name = '_no_airport_no_gas_coal_combined_oil_combined'
-output_var = [0]
+output_var = [0,1,2,3,4,5]
 output_var_names = [output_var_names_all[ov] for ov in output_var]
 image_radius = 30
-run_suffix = "_withinit"
+run_suffix = "_hp"
 
-import_hyperparameters = 153
+import_hyperparameters = None
 
 cnn_data_name = 'energy_'+standard+'_air'
 with open(data_dir+"process/data_process_dic"+char_name+"_"+standard+".pickle", "rb") as data_standard:
@@ -51,6 +51,8 @@ else:
     files = glob.glob(
         output_dir + output_folder + '/results/results_' + "".join([str(ov) for ov in output_var]) + '_' + str(
             image_radius) + '/model_output_hyper_searching_dic_*_' + str(import_hyperparameters) + '_*'+run_suffix+'.pickle')
+
+print(len(files), "models found.")
 
 cnn_train_loss_list = []
 cnn_validation_loss_list = []
